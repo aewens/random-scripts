@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+
+from sys import stderr, exit
+from json import loads, dumps
+from os import makedirs
+from os.path import expanduser, isfile, exists
+from argparse import ArgumentParser
+from subprocess import Popen, PIPE, STDOUT
+from shlex import split as shell_split
+
+config_path = expanduser("~/.config/gmt")
+config_file = "settings.json"
+if not exists(config_path):
+    makedirs(config_path)
+
+parser = ArgumentParser(description="A meta bot for ~team")
+parser.add_argument(
+    "-c", 
+    "--config", 
+    dest="config",
+    default="%s/%s" % (config_path, config_file), 
+    help="Load config file"
+)
+parser.add_argument(
+    "-i",
+    "--init",
+    dest="init",
+    help="Initialize git repo using current user"
+)
+parser.add_argument(
+    "-m",
+    "--mirror",
+    dest="mirror",
+    help="Initialize git repo using current user"
+)
+arguments = parser.parse_args()
+
+def eprint(*args, **kwargs):
+    print(*args, file=stderr, **kwargs)
+
+def encode(data):
+    try:
+        return dumps(data, indent=4, separators=(",", ": "))
+    except ValueError as e:
+        eprint("ERROR: JSON parsing error:\n%s" % data)
+        return None
+
+def decode(data):
+    try:
+        return loads(data)
+    except ValueError as e:
+        eprint("ERROR: JSON parsing error:\n%s" % data)
+        return None
+
+def execute(cmd):
+    command = shell_split(command)
+    return Popen(command, stdout=PIPE, stderr=STDOUT).communicate()
+
+def save(config, data):
+    with open(config, "w") as c:
+        c.write(encode(data))
+        return data
+
+def load(config):
+    if not isfile(config):
+        init = dict()
+        init["default"] = None
+        init["users"] = []
+        return save(config, init)
+    
+    with open(config, "r") as s:
+        return decode(s.read())
+
+def handler(arguments):
+    config = arguments.config
+    settings = load(arguments.config)
+    users = settings.get("users")
+    if len(users) == 0:
+        user = dict()
+        user["alias"] = input("Alias: ")
+        user["name"] = input("Git Name: ")
+        user["email"] = input("Git Email: ")
+        user["url"] = input("URL: ")
+        user["protocol"] = input("Protocol (HTTP, HTTPS, or SSH): ")
+        settings["default"] = user["alias"]
+        settings["users"].append(user)
+        save(config, settings)
+
+def main():
+    handler(arguments)
+
+if __name__ == "__main__":
+    main()
