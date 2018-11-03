@@ -145,20 +145,19 @@ def mirror_repo(repo_name, whoami, profiles):
 
         if found:
             print("Mirror repo already exists: '{}'".format(found))
-            return
-
-        found = whoami
-        gc.writelines([
-            "[remote \"{}\"]\n".format(whoami),
-            "\turl = {}\n".format(remote),
-            "\tfetch = +refs/heads/*:refs/remotes/{}/*\n".format(whoami)
-        ])
-        print("Added mirror repo '{}'".format(whoami))
+        else:
+            found = whoami
+            gc.writelines([
+                "[remote \"{}\"]\n".format(whoami),
+                "\turl = {}\n".format(remote),
+                "\tfetch = +refs/heads/*:refs/remotes/{}/*\n".format(whoami)
+            ])
+            print("Added mirror repo '{}'".format(whoami))
 
     print("Renaming remote 'origin' to 'upstream'")
     execute("git remote rename origin upstream")
     print("Renaming remote '{}' to 'origin'".format(found))
-    execute("git remote rename origin upstream")
+    execute("git remote rename {} origin".format(found))
     print("You can now use `git push -u origin <branch>`")
 
 def restore_origin():
