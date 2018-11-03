@@ -8,33 +8,6 @@ from argparse import ArgumentParser
 from subprocess import Popen, PIPE, STDOUT
 from shlex import split as shell_split
 
-config_path = expanduser("~/.config/gmt")
-config_file = "settings.json"
-if not exists(config_path):
-    makedirs(config_path)
-
-parser = ArgumentParser(description="A meta bot for ~team")
-parser.add_argument(
-    "-c", 
-    "--config", 
-    dest="config",
-    default="%s/%s" % (config_path, config_file), 
-    help="Load config file"
-)
-parser.add_argument(
-    "-i",
-    "--init",
-    dest="init",
-    help="Initialize git repo using current user"
-)
-parser.add_argument(
-    "-m",
-    "--mirror",
-    dest="mirror",
-    help="Initialize git repo using current user"
-)
-arguments = parser.parse_args()
-
 def eprint(*args, **kwargs):
     print(*args, file=stderr, **kwargs)
 
@@ -53,8 +26,11 @@ def decode(data):
         return None
 
 def execute(cmd):
-    command = shell_split(command)
-    return Popen(command, stdout=PIPE, stderr=STDOUT).communicate()
+    command = shell_split(cmd)
+    stdout, stderr = Popen(command, stdout=PIPE, stderr=STDOUT).communicate()
+    stdout = stdout.decode() if stdout is not None else None
+    stderr = stderr.decode() if stderr is not None else None
+    return stdout, stderr
 
 def save(config, data):
     with open(config, "w") as c:
@@ -65,28 +41,124 @@ def load(config):
     if not isfile(config):
         init = dict()
         init["default"] = None
-        init["users"] = []
+        init["profiles"] = dict()
         return save(config, init)
     
     with open(config, "r") as s:
         return decode(s.read())
 
-def handler(arguments):
-    config = arguments.config
-    settings = load(arguments.config)
-    users = settings.get("users")
-    if len(users) == 0:
-        user = dict()
-        user["alias"] = input("Alias: ")
-        user["name"] = input("Git Name: ")
-        user["email"] = input("Git Email: ")
-        user["url"] = input("URL: ")
-        user["protocol"] = input("Protocol (HTTP, HTTPS, or SSH): ")
-        settings["default"] = user["alias"]
-        settings["users"].append(user)
+def add_profile(config):
+    settings = load(config)
+    profiles = settings.get("profiles", dict())
+    user = dict()
+    alias = input("Profile Name: ")
+    user["name"] = input("Git Name: ")
+    user["email"] = input("Git Email: ")
+    user["url"] = input("URL: ")
+    user["user"] = input("User: ")
+    user["protocol"] = input("Protocol (HTTP, HTTPS, or SSH): ").lower()
+    if len(list(profiles.keys())) == 0:
+        settings["default"] = alias
+    settings["profiles"][alias] = user
+    save(config, settings)
+    return settings, settings.get("profiles", dict())
+
+def delete_profile(config, profile):
+    settings = load(config)
+    if settings.get("profiles", dict()).get(profile, None) is not None:
+        del settings["profiles"][profile]
         save(config, settings)
+    return settings, settings.get("profiles", dict())
+
+def list_profiles(config):
+    settings = load(config)
+    profiles = settings.get("profiles", dict())
+    for alias, info in profiles.items():
+        print("* {}".format(alias))
+
+def handler(args):
+    config = args.config
+    settings = load(args.config)
+    profiles = settings.get("profiles", dict())
+    if len(list(profiles.keys())) == 0:
+        settings, profiles = add_profile(config)
+
+    if args.add:
+        settings, profiles = add_profile(config)
+
+    if args.delete is not None:
+        settings, profiles = delete_profile(config, args.delete)
+
+    if args.list:
+        list_profiles(config)
+
+    if args.switch is not None:
+        profile = profiles.get(args.switch, None)
+        if profile is None:
+            eprint("ERROR: '{}' is not a profile".format(args.switch))
+            exit(1)
+
+        name = profile.get("name", "")
+        email = profile.get("email", "")
+        execute("git config --global user.name '{}'".format(name))
+        execute("git config --global user.email '{}'".format(email))
+        print("Now using profile '{}'".format(args.switch))
 
 def main():
+    config_path = expanduser("~/.config/gmt")
+    config_file = "settings.json"
+    if not exists(config_path):
+        makedirs(config_path)
+
+    parser = ArgumentParser(description="GMT - Git Management Tool")
+    parser.add_argument(
+        "-c",
+        "--config",
+        dest="config",
+        default="%s/%s" % (config_path, config_file),
+        help="Load config file"
+    )
+    parser.add_argument(
+        "-i",
+        "--init",
+        dest="init",
+        action="store_true",
+        help="Initialize git repo using current user"
+    )
+    parser.add_argument(
+        "-m",
+        "--mirror",
+        dest="mirror",
+        help="Initialize git repo to selected profile"
+    )
+    parser.add_argument(
+        "-s",
+        "--switch",
+        dest="switch",
+        help="Switch context to selected profile"
+    )
+    parser.add_argument(
+        "-l",
+        "--list",
+        dest="list",
+        action="store_true",
+        help="List all profiles"
+    )
+    parser.add_argument(
+        "-A",
+        "--add",
+        dest="add",
+        action="store_true",
+        help="Add new profile"
+    )
+    parser.add_argument(
+        "-D",
+        "--delete",
+        dest="delete",
+        help="Delete selected profile"
+    )
+    arguments = parser.parse_args()
+
     handler(arguments)
 
 if __name__ == "__main__":
