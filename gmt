@@ -114,9 +114,8 @@ def detect_user(config):
 
     return profile, settings, profiles
 
-def mirror_repo(whoami, profiles):
+def mirror_repo(repo_name, whoami, profiles):
     cwd = getcwd()
-    repo_name = cwd.split("/")[-1]
     if ".git" not in listdir("."):
         eprint("ERROR: This directory is not a git repository")
         exit(1)
@@ -177,8 +176,8 @@ def handler(args):
     if args.switch is not None:
         switch_profile(args.switch, profiles)
 
-    if args.mirror:
-        mirror_repo(whoami, profiles)
+    if args.mirror is not None:
+        mirror_repo(args.mirror, whoami, profiles)
 
 def main():
     config_path = expanduser("~/.config/gmt")
@@ -205,7 +204,6 @@ def main():
         "-m",
         "--mirror",
         dest="mirror",
-        action="store_true",
         help="Initialize git repo to using current profile"
     )
     parser.add_argument(
