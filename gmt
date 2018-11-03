@@ -176,6 +176,7 @@ def restore_origin():
     execute("git remote rename origin _origin")
     print("Renaming remote 'upstream' to 'origin'")
     execute("git remote rename upstream origin")
+    print("You can now use `git push -u origin <branch>`")
 
 def handler(args):
     config = args.config
