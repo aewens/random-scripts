@@ -141,18 +141,42 @@ def mirror_repo(repo_name, whoami, profiles):
         lines = gc.readlines()
         for l, line in enumerate(lines):
             if remote in line:
-                found = True
+                found = lines[l-1].split("\"")[1]
 
         if found:
-            print("Mirror repo already exists")
+            print("Mirror repo already exists: '{}'".format(found))
             return
 
+        found = whoami
         gc.writelines([
             "[remote \"{}\"]\n".format(whoami),
             "\turl = {}\n".format(remote),
             "\tfetch = +refs/heads/*:refs/remotes/{}/*\n".format(whoami)
         ])
         print("Added mirror repo '{}'".format(whoami))
+
+    print("Renaming remote 'origin' to 'upstream'")
+    execute("git remote rename origin upstream")
+    print("Renaming remote '{}' to 'origin'".format(found))
+    execute("git remote rename origin upstream")
+    print("You can now use `git push -u origin <branch>`")
+
+def restore_origin():
+    cwd = getcwd()
+    if ".git" not in listdir("."):
+        eprint("ERROR: This directory is not a git repository")
+        exit(1)
+        
+    remotes, _ = execute("git remote")
+    remotes = remotes.strip().split("\n")
+    if "upstream" not in remotes:
+        print("Origin already restored")
+        return
+
+    print("Renaming remote 'origin' to '_origin'")
+    execute("git remote rename origin _origin")
+    print("Renaming remote 'upstream' to 'origin'")
+    execute("git remote rename upstream origin")
 
 def handler(args):
     config = args.config
@@ -178,6 +202,9 @@ def handler(args):
 
     if args.mirror is not None:
         mirror_repo(args.mirror, whoami, profiles)
+
+    if args.restore:
+        restore_origin()
 
 def main():
     config_path = expanduser("~/.config/gmt")
@@ -233,10 +260,11 @@ def main():
         help="Delete selected profile"
     )
     parser.add_argument(
-        "-w",
-        "--whoami",
-        dest="whoami",
-        help="Shows which profile you are using"
+        "-r",
+        "--restore",
+        dest="restore",
+        action="store_true",
+        help="Restore origin after mirror"
     )
     arguments = parser.parse_args()
 
