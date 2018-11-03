@@ -2,7 +2,7 @@
 
 from sys import stderr, exit
 from json import loads, dumps
-from os import makedirs
+from os import makedirs, getcwd, listdir
 from os.path import expanduser, isfile, exists
 from argparse import ArgumentParser
 from subprocess import Popen, PIPE, STDOUT
@@ -76,12 +76,94 @@ def list_profiles(config):
     for alias, info in profiles.items():
         print("* {}".format(alias))
 
+def switch_profile(switch, profiles):
+    profile = profiles.get(switch, None)
+    if profile is None:
+        eprint("ERROR: '{}' is not a profile".format(switch))
+        exit(1)
+
+    name = profile.get("name", "")
+    email = profile.get("email", "")
+    execute("git config --global user.name '{}'".format(name))
+    execute("git config --global user.email '{}'".format(email))
+    print("Now using profile '{}'".format(switch))
+    return profile
+
+def detect_user(config):
+    settings = load(config)
+    profiles = settings.get("profiles", dict())
+    name, _ = execute("git config --global user.name")
+    email, _ = execute("git config --global user.email")
+
+    name = name.strip()
+    email = email.strip()
+
+    profile = None
+    for alias, info in profiles.items():
+        iname = info.get("name", "")
+        iemail = info.get("email", "")
+        if name == iname and email == iemail:
+            print("Currently using profile '{}'".format(alias))
+            profile = alias
+            break
+    
+    if profile is None:
+        eprint("ERROR: Current git profile not found, please create it")
+        add_profile(config)
+        return detect_user(config)
+
+    return profile, settings, profiles
+
+def mirror_repo(whoami, profiles):
+    cwd = getcwd()
+    repo_name = cwd.split("/")[-1]
+    if ".git" not in listdir("."):
+        eprint("ERROR: This directory is not a git repository")
+        exit(1)
+    
+    if "config" not in listdir(".git"):
+        eprint("ERROR: .git/config is missing")
+        exit(1)
+
+    remote = None
+    profile = profiles.get(whoami, dict())
+    url = profile.get("url")
+    user = profile.get("user")
+    protocol = profile.get("protocol")
+    if protocol == "ssh":
+        remote = "git@{}:{}/{}.git".format(url, user, repo_name)
+    elif protocol == "http":
+        remote = "http://{}/{}/{}".format(url, user, repo_name)
+    elif protocol == "https":
+        remote = "https://{}/{}/{}".format(url, user, repo_name)
+
+    found = False
+    with open("{}/.git/config".format(cwd), "r+") as gc:
+        lines = gc.readlines()
+        for l, line in enumerate(lines):
+            if remote in line:
+                found = True
+
+        if found:
+            print("Mirror repo already exists")
+            return
+
+        gc.writelines([
+            "[remote \"{}\"]\n".format(whoami),
+            "\turl = {}\n".format(remote),
+            "\tfetch = +refs/heads/*:refs/remotes/{}/*\n".format(whoami)
+        ])
+        print("Added mirror repo '{}'".format(whoami))
+
 def handler(args):
     config = args.config
     settings = load(args.config)
     profiles = settings.get("profiles", dict())
+    whoami = None
     if len(list(profiles.keys())) == 0:
         settings, profiles = add_profile(config)
+
+    whoami, settings, profiles = detect_user(config)
 
     if args.add:
         settings, profiles = add_profile(config)
@@ -93,16 +175,10 @@ def handler(args):
         list_profiles(config)
 
     if args.switch is not None:
-        profile = profiles.get(args.switch, None)
-        if profile is None:
-            eprint("ERROR: '{}' is not a profile".format(args.switch))
-            exit(1)
+        switch_profile(args.switch, profiles)
 
-        name = profile.get("name", "")
-        email = profile.get("email", "")
-        execute("git config --global user.name '{}'".format(name))
-        execute("git config --global user.email '{}'".format(email))
-        print("Now using profile '{}'".format(args.switch))
+    if args.mirror:
+        mirror_repo(whoami, profiles)
 
 def main():
     config_path = expanduser("~/.config/gmt")
@@ -129,7 +205,8 @@ def main():
         "-m",
         "--mirror",
         dest="mirror",
-        help="Initialize git repo to selected profile"
+        action="store_true",
+        help="Initialize git repo to using current profile"
     )
     parser.add_argument(
         "-s",
@@ -156,6 +233,12 @@ def main():
         "--delete",
         dest="delete",
         help="Delete selected profile"
+    )
+    parser.add_argument(
+        "-w",
+        "--whoami",
+        dest="whoami",
+        help="Shows which profile you are using"
     )
     arguments = parser.parse_args()
 
