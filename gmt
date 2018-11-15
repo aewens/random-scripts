@@ -231,7 +231,7 @@ def main():
         "-m",
         "--mirror",
         dest="mirror",
-        help="Initialize git repo to using current profile"
+        help="Mirror repository to current profile's service"
     )
     parser.add_argument(
         "-s",
