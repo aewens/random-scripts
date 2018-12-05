@@ -59,16 +59,19 @@ def add_profile(config):
     user["protocol"] = input("Protocol (HTTP, HTTPS, or SSH): ").lower()
     if len(list(profiles.keys())) == 0:
         settings["default"] = alias
-    settings["profiles"][alias] = user
+    profiles[alias] = user
+    settings["profiles"] = profiles
     save(config, settings)
-    return settings, settings.get("profiles", dict())
+    return settings, profiles
 
 def delete_profile(config, profile):
     settings = load(config)
-    if settings.get("profiles", dict()).get(profile, None) is not None:
-        del settings["profiles"][profile]
+    profiles = settings.get("profiles", dict())
+    if profiles.get(profile, None) is not None:
+        del profiles[profile]
+        settings["profiles"] = profiles
         save(config, settings)
-    return settings, settings.get("profiles", dict())
+    return settings, profiles
 
 def list_profiles(config):
     settings = load(config)
