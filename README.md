@@ -1,5 +1,5 @@
-# abots
-A bunch of tiny scripts
+# random-scripts
+A bunch of random scripts
 
 ## The Scripts
 
